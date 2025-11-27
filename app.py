@@ -115,7 +115,7 @@ def ml_predict(features):
         return None
 
 # ----------------------------
-# Main Prediction Logic
+# Main Prediction Logic with SAFE STRENGTH MAPPING
 # ----------------------------
 def predict_strength(password):
     f = extract_features(password)
@@ -139,10 +139,42 @@ def predict_strength(password):
     if models_loaded and model is not None and scaler is not None:
         ml_pred = ml_predict(f)
         if ml_pred is not None:
-            return ml_pred
+            # SAFE: Map any ML output to our expected strength levels
+            if ml_pred in ["very_weak", "weak", "strong"]:
+                return ml_pred
+            else:
+                # Map unknown ML outputs to our system
+                if isinstance(ml_pred, (int, float)):
+                    if ml_pred <= 0.33:
+                        return "very_weak"
+                    elif ml_pred <= 0.66:
+                        return "weak"
+                    else:
+                        return "strong"
+                else:
+                    # Default fallback for unknown string outputs
+                    return "weak"
 
     # Fallback to rule-based prediction
     return rule_based_predict(f, password)
+
+# ----------------------------
+# SAFE Strength Progress Mapping
+# ----------------------------
+def get_strength_progress(strength):
+    """Safely map strength to progress values with fallback"""
+    strength_progress = {
+        "very_weak": {"width": 15, "color": "#ff4757", "emoji": "🔴"},
+        "weak": {"width": 40, "color": "#ffa502", "emoji": "🟠"}, 
+        "strong": {"width": 90, "color": "#2ed573", "emoji": "🟢"}
+    }
+    
+    # If strength is not in expected values, default to "weak"
+    if strength not in strength_progress:
+        st.sidebar.warning(f"⚠️ Unknown strength value: '{strength}'. Defaulting to 'weak'.")
+        return strength_progress["weak"]
+    
+    return strength_progress[strength]
 
 # Custom CSS for beautiful styling
 st.markdown("""
@@ -280,13 +312,14 @@ st.markdown("""
         margin: 1rem 0;
         border-left: 5px solid #4d7cfe;
     }
-    .feature-debug {
+    .debug-box {
         background: #f8f9fa;
         padding: 1rem;
         border-radius: 10px;
         margin: 1rem 0;
         font-family: monospace;
         font-size: 0.9rem;
+        border-left: 4px solid #6c757d;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -340,102 +373,104 @@ with col2:
                 import time
                 time.sleep(0.5)
                 
-                strength = predict_strength(password)
-                features = extract_features(password)
-                
-                # Progress bar visualization
-                st.markdown("### 📊 Security Level Analysis")
-                
-                strength_progress = {
-                    "very_weak": {"width": 15, "color": "#ff4757", "emoji": "🔴"},
-                    "weak": {"width": 40, "color": "#ffa502", "emoji": "🟠"}, 
-                    "strong": {"width": 90, "color": "#2ed573", "emoji": "🟢"}
-                }
-                
-                progress_info = strength_progress[strength]
-                
-                st.markdown(f"""
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: {progress_info['width']}%; background: {progress_info['color']};"></div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Display beautiful result card
-                if strength == "very_weak":
+                # Get prediction with error handling
+                try:
+                    strength = predict_strength(password)
+                    features = extract_features(password)
+                    
+                    # SAFE: Get progress info with fallback
+                    progress_info = get_strength_progress(strength)
+                    
+                    # Progress bar visualization
+                    st.markdown("### 📊 Security Level Analysis")
+                    
                     st.markdown(f"""
-                    <div class="strength-card very-weak-card">
-                        <div class="security-icon">🚨</div>
-                        <h1 style='font-size: 2.5rem; margin: 0;'>CRITICAL RISK</h1>
-                        <p style='font-size: 1.4rem; font-weight: bold;'>Very Weak Password</p>
-                        <p style='font-size: 1.1rem;'>Your password poses immediate security threats</p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {progress_info['width']}%; background: {progress_info['color']};"></div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    st.markdown("""
-                    <div class="critical-section">
-                        <h3>🚨 IMMEDIATE ACTION REQUIRED</h3>
-                        <p><b>This password can be cracked in seconds!</b> Avoid common patterns, 
-                        increase length, and add character variety immediately.</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                elif strength == "weak":
-                    st.markdown(f"""
-                    <div class="strength-card weak-card">
-                        <div class="security-icon">⚠️</div>
-                        <h1 style='font-size: 2.2rem; margin: 0;'>MODERATE RISK</h1>
-                        <p style='font-size: 1.4rem; font-weight: bold;'>Weak Password</p>
-                        <p style='font-size: 1.1rem;'>Your password needs significant improvement</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.markdown("""
-                    <div class="warning-section">
-                        <h3>⚠️ SECURITY IMPROVEMENT NEEDED</h3>
-                        <p><b>This password is vulnerable to attacks!</b> Add more digits, 
-                        special characters, uppercase letters, and increase length.</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                else:
-                    st.markdown(f"""
-                    <div class="strength-card strong-card success-animation">
-                        <div class="security-icon">🎉</div>
-                        <h1 style='font-size: 2.5rem; margin: 0;'>EXCELLENT SECURITY</h1>
-                        <p style='font-size: 1.4rem; font-weight: bold;'>Strong Password</p>
-                        <p style='font-size: 1.1rem;'>Your password provides robust protection</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    st.balloons()
-                    st.success("### ✅ Perfect! Your password meets high security standards!")
-                
-                # Password composition analysis
-                st.markdown("### 🧩 Password Composition")
-                
-                cols = st.columns(4)
-                metrics_data = [
-                    {"icon": "📏", "value": features['length'], "label": "Length"},
-                    {"icon": "🔠", "value": features['upper'], "label": "Uppercase"},
-                    {"icon": "🔢", "value": features['digits'], "label": "Digits"}, 
-                    {"icon": "⭐", "value": features['special'], "label": "Special"}
-                ]
-                
-                for i, metric in enumerate(metrics_data):
-                    with cols[i]:
+                    # Display beautiful result card based on strength
+                    if strength == "very_weak":
                         st.markdown(f"""
-                        <div class="metric-card">
-                            <h2 style='font-size: 2rem; margin: 0;'>{metric['icon']}</h2>
-                            <h3 style='font-size: 2rem; margin: 0.5rem 0; color: #2c3e50;'>{metric['value']}</h3>
-                            <p style='margin: 0; font-weight: bold; color: #666;'>{metric['label']}</p>
+                        <div class="strength-card very-weak-card">
+                            <div class="security-icon">🚨</div>
+                            <h1 style='font-size: 2.5rem; margin: 0;'>CRITICAL RISK</h1>
+                            <p style='font-size: 1.4rem; font-weight: bold;'>Very Weak Password</p>
+                            <p style='font-size: 1.1rem;'>Your password poses immediate security threats</p>
                         </div>
                         """, unsafe_allow_html=True)
-                
-                # Debug information (can be removed in production)
-                with st.expander("🔧 Technical Details", expanded=False):
-                    st.markdown("### Feature Values Used:")
-                    st.json(features)
-                    st.markdown(f"**Analysis Method:** {'🤖 ML Model' if models_loaded and 'ml_pred' in locals() else '⚡ Rule-Based'}")
+                        
+                        st.markdown("""
+                        <div class="critical-section">
+                            <h3>🚨 IMMEDIATE ACTION REQUIRED</h3>
+                            <p><b>This password can be cracked in seconds!</b> Avoid common patterns, 
+                            increase length, and add character variety immediately.</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                    elif strength == "weak":
+                        st.markdown(f"""
+                        <div class="strength-card weak-card">
+                            <div class="security-icon">⚠️</div>
+                            <h1 style='font-size: 2.2rem; margin: 0;'>MODERATE RISK</h1>
+                            <p style='font-size: 1.4rem; font-weight: bold;'>Weak Password</p>
+                            <p style='font-size: 1.1rem;'>Your password needs significant improvement</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.markdown("""
+                        <div class="warning-section">
+                            <h3>⚠️ SECURITY IMPROVEMENT NEEDED</h3>
+                            <p><b>This password is vulnerable to attacks!</b> Add more digits, 
+                            special characters, uppercase letters, and increase length.</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                    else:  # strong or any other value falls here
+                        st.markdown(f"""
+                        <div class="strength-card strong-card success-animation">
+                            <div class="security-icon">🎉</div>
+                            <h1 style='font-size: 2.5rem; margin: 0;'>EXCELLENT SECURITY</h1>
+                            <p style='font-size: 1.4rem; font-weight: bold;'>Strong Password</p>
+                            <p style='font-size: 1.1rem;'>Your password provides robust protection</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.balloons()
+                        st.success("### ✅ Perfect! Your password meets high security standards!")
+                    
+                    # Password composition analysis
+                    st.markdown("### 🧩 Password Composition")
+                    
+                    cols = st.columns(4)
+                    metrics_data = [
+                        {"icon": "📏", "value": features['length'], "label": "Length"},
+                        {"icon": "🔠", "value": features['upper'], "label": "Uppercase"},
+                        {"icon": "🔢", "value": features['digits'], "label": "Digits"}, 
+                        {"icon": "⭐", "value": features['special'], "label": "Special"}
+                    ]
+                    
+                    for i, metric in enumerate(metrics_data):
+                        with cols[i]:
+                            st.markdown(f"""
+                            <div class="metric-card">
+                                <h2 style='font-size: 2rem; margin: 0;'>{metric['icon']}</h2>
+                                <h3 style='font-size: 2rem; margin: 0.5rem 0; color: #2c3e50;'>{metric['value']}</h3>
+                                <p style='margin: 0; font-weight: bold; color: #666;'>{metric['label']}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    
+                    # Debug information (can be removed in production)
+                    with st.expander("🔧 Technical Details", expanded=False):
+                        st.markdown("### Feature Values Used:")
+                        st.json(features)
+                        st.markdown(f"**Detected Strength:** `{strength}`")
+                        st.markdown(f"**Analysis Method:** {'🤖 ML Model' if models_loaded else '⚡ Rule-Based'}")
+                        
+                except Exception as e:
+                    st.error(f"❌ Error during password analysis: {str(e)}")
+                    st.info("Please try a different password or check the console for details.")
 
 # Footer
 st.markdown("---")
