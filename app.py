@@ -3,12 +3,25 @@ import pandas as pd
 import numpy as np
 import joblib
 import re
+import os
 
 # ----------------------------
-# Load Model & Scaler
+# Load Model & Scaler with Error Handling
 # ----------------------------
-model = joblib.load("password_model.pkl")
-scaler = joblib.load("password_scaler.pkl")
+def load_models():
+    """Load models with proper error handling"""
+    try:
+        model = joblib.load("password_model.pkl")
+        scaler = joblib.load("password_scaler.pkl")
+        return model, scaler, True
+    except FileNotFoundError:
+        st.error("❌ Model files not found. Please ensure 'password_model.pkl' and 'password_scaler.pkl' are in the app directory.")
+        return None, None, False
+    except Exception as e:
+        st.error(f"❌ Error loading models: {str(e)}")
+        return None, None, False
+
+model, scaler, models_loaded = load_models()
 
 # ----------------------------
 # Feature Extraction Function
@@ -32,39 +45,103 @@ def extract_features(password):
     return features
 
 # ----------------------------
-# Prediction Logic (ML + Rules)
+# Rule-based Prediction (Fallback)
+# ----------------------------
+def rule_based_predict(features, password):
+    """Advanced rule-based password strength prediction"""
+    pw_lower = password.lower()
+    
+    # Very weak conditions
+    very_weak_patterns = ["password", "12345", "123456", "12345678", "123456789", 
+                         "qwerty", "abc123", "admin", "welcome", "letmein", "monkey"]
+    
+    if (features['length'] <= 4 or
+        pw_lower in very_weak_patterns or
+        features['common_pattern'] == 1):
+        return "very_weak"
+    
+    # Weak conditions
+    if (features['length'] <= 6 or
+        features['digits'] == 0 or
+        features['upper'] == 0 or
+        features['special'] == 0):
+        return "weak"
+    
+    # Strong conditions
+    if (features['length'] >= 12 and
+        features['digits'] >= 2 and
+        features['special'] >= 2 and
+        features['upper'] >= 2 and
+        features['lower'] >= 3):
+        return "strong"
+    
+    # Medium to Strong conditions
+    if (features['length'] >= 10 and
+        features['digits'] >= 1 and
+        features['special'] >= 1 and
+        features['upper'] >= 1 and
+        features['lower'] >= 4):
+        return "strong"
+    
+    return "weak"
+
+# ----------------------------
+# ML Prediction with Feature Alignment
+# ----------------------------
+def ml_predict(features):
+    """ML prediction with proper feature alignment"""
+    try:
+        # Create DataFrame with expected feature names
+        expected_features = [
+            'length', 'upper', 'lower', 'digits', 'special',
+            'digit_ratio', 'special_ratio', 'upper_ratio', 'lower_ratio', 
+            'common_pattern'
+        ]
+        
+        # Ensure all expected features are present
+        feature_row = [features.get(feature, 0) for feature in expected_features]
+        df_f = pd.DataFrame([feature_row], columns=expected_features)
+        
+        # Scale features
+        scaled = scaler.transform(df_f)
+        
+        # Predict
+        pred = model.predict(scaled)[0]
+        return pred
+        
+    except Exception as e:
+        st.sidebar.warning(f"⚠️ ML prediction failed: {str(e)}. Using rule-based method.")
+        return None
+
+# ----------------------------
+# Main Prediction Logic
 # ----------------------------
 def predict_strength(password):
     f = extract_features(password)
-    pw = password.lower()
+    pw_lower = password.lower()
 
     # RULE 1: Very short passwords → very_weak
     if f['length'] <= 4:
         return "very_weak"
 
     # RULE 2: Common weak passwords
-    common_list = ["password", "12345", "123456", "qwerty", "abc123"]
-
-    if pw in common_list:
+    common_weak_list = ["password", "12345", "123456", "qwerty", "abc123", "admin", "welcome"]
+    if pw_lower in common_weak_list:
         return "very_weak"
 
-    # Convert features → ML input
-    df_f = pd.DataFrame([f])
-    scaled = scaler.transform(df_f)
-
-    pred = model.predict(scaled)[0]  # ML prediction: very_weak / weak / strong
-
-    # RULE 3: Very strong override
-    if (
-        f['length'] >= 12 and
-        f['digits'] >= 2 and
-        f['special'] >= 1 and
-        f['upper'] >= 1 and
-        f['lower'] >= 1
-    ):
+    # RULE 3: Very strong override (applies regardless of ML)
+    if (f['length'] >= 12 and f['digits'] >= 2 and 
+        f['special'] >= 2 and f['upper'] >= 2 and f['lower'] >= 4):
         return "strong"
 
-    return pred
+    # Use ML if available and working
+    if models_loaded and model is not None and scaler is not None:
+        ml_pred = ml_predict(f)
+        if ml_pred is not None:
+            return ml_pred
+
+    # Fallback to rule-based prediction
+    return rule_based_predict(f, password)
 
 # Custom CSS for beautiful styling
 st.markdown("""
@@ -133,32 +210,6 @@ st.markdown("""
         transform: translateY(-3px);
         box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
     }
-    .feature-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 1.2rem;
-        margin: 2.5rem 0;
-    }
-    .feature-item {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 18px;
-        text-align: center;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-        border-left: 5px solid #667eea;
-        transition: transform 0.3s ease;
-    }
-    .feature-item:hover {
-        transform: translateY(-5px);
-    }
-    .tips-section {
-        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-        padding: 2.5rem;
-        border-radius: 25px;
-        margin: 2.5rem 0;
-        border-left: 6px solid #667eea;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-    }
     .metric-card {
         background: white;
         padding: 1.8rem;
@@ -221,6 +272,20 @@ st.markdown("""
         border-left: 5px solid #ff4757;
         animation: pulse 2s infinite;
     }
+    .info-box {
+        background: linear-gradient(135deg, #d6e4ff, #84a9ff);
+        padding: 1.5rem;
+        border-radius: 15px;
+        margin: 1rem 0;
+        border-left: 5px solid #4d7cfe;
+    }
+    .model-status {
+        padding: 1rem;
+        border-radius: 10px;
+        margin: 0.5rem 0;
+        text-align: center;
+        font-weight: bold;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -232,9 +297,23 @@ st.set_page_config(page_title="Password Strength Analyzer", page_icon="🔐", la
 st.markdown('<div class="main-header">🔐 Password Strength Analyzer</div>', unsafe_allow_html=True)
 st.markdown("""
 <div class="sub-header">
-    Advanced ML-powered security analysis • Protect your digital identity
+    Advanced Security Analysis • Protect your digital identity
 </div>
 """, unsafe_allow_html=True)
+
+# Display model status
+if models_loaded:
+    st.markdown("""
+    <div class="info-box">
+        <strong>🤖 AI-Powered Analysis:</strong> Using Machine Learning model for advanced password strength prediction
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div class="info-box">
+        <strong>⚡ Rule-Based Analysis:</strong> Using advanced security rules for password strength evaluation
+    </div>
+    """, unsafe_allow_html=True)
 
 # Main content
 col1, col2, col3 = st.columns([1, 2, 1])
@@ -255,9 +334,9 @@ with col2:
         if password.strip() == "":
             st.warning("⚠️ Please enter a password to analyze!")
         else:
-            with st.spinner("🔍 Analyzing password strength with ML..."):
+            with st.spinner("🔍 Analyzing password strength..."):
                 import time
-                time.sleep(0.8)  # Simulate analysis time
+                time.sleep(0.5)
                 
                 strength = predict_strength(password)
                 features = extract_features(password)
@@ -266,9 +345,9 @@ with col2:
                 st.markdown("### 📊 Security Level Analysis")
                 
                 strength_progress = {
-                    "very_weak": {"width": 20, "color": "#ff4757", "emoji": "🔴"},
-                    "weak": {"width": 50, "color": "#ffa502", "emoji": "🟠"}, 
-                    "strong": {"width": 95, "color": "#2ed573", "emoji": "🟢"}
+                    "very_weak": {"width": 15, "color": "#ff4757", "emoji": "🔴"},
+                    "weak": {"width": 40, "color": "#ffa502", "emoji": "🟠"}, 
+                    "strong": {"width": 90, "color": "#2ed573", "emoji": "🟢"}
                 }
                 
                 progress_info = strength_progress[strength]
@@ -290,7 +369,6 @@ with col2:
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Critical warning section
                     st.markdown("""
                     <div class="critical-section">
                         <h3>🚨 IMMEDIATE ACTION REQUIRED</h3>
@@ -309,7 +387,6 @@ with col2:
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Warning section
                     st.markdown("""
                     <div class="warning-section">
                         <h3>⚠️ SECURITY IMPROVEMENT NEEDED</h3>
@@ -328,7 +405,6 @@ with col2:
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Success celebration
                     st.balloons()
                     st.success("### ✅ Perfect! Your password meets high security standards!")
                 
@@ -353,14 +429,10 @@ with col2:
                         </div>
                         """, unsafe_allow_html=True)
                 
-                # Detailed feature analysis
-                with st.expander("🔍 **Detailed Technical Analysis**", expanded=False):
-                    st.json(features)
-                
                 # Security recommendations
                 with st.expander("💡 **Security Recommendations & Best Practices**", expanded=True):
                     st.markdown("""
-                    <div class="tips-section">
+                    <div style="background: #f8f9fa; padding: 2rem; border-radius: 15px;">
                         <h4>🎯 How to Create Strong Passwords:</h4>
                         <ul style="text-align: left; font-size: 1.1rem;">
                             <li><b>Use 12+ characters</b> - Longer passwords are exponentially stronger</li>
@@ -369,15 +441,6 @@ with col2:
                             <li><b>No personal information</b> - Names, birthdays, pet names</li>
                             <li><b>Unique for each account</b> - Prevent credential stuffing</li>
                             <li><b>Consider passphrases</b> - "PurpleDragon$FliesHigh42!"</li>
-                            <li><b>Use password managers</b> - For secure storage</li>
-                        </ul>
-                        
-                        <h4>🚫 Common Mistakes to Avoid:</h4>
-                        <ul style="text-align: left; font-size: 1.1rem;">
-                            <li>Sequential numbers (12345, 11111)</li>
-                            <li>Common words (password, admin, welcome)</li>
-                            <li>Keyboard patterns (qwerty, asdfgh)</li>
-                            <li>Simple substitutions (P@ssw0rd, Adm1n)</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
@@ -392,27 +455,29 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Sidebar with additional info
+# Sidebar
 with st.sidebar:
     st.markdown("## ℹ️ About This Tool")
+    
+    # Model status
+    if models_loaded:
+        st.success("### 🤖 ML Model: ✅ Loaded")
+    else:
+        st.warning("### ⚡ ML Model: Using Rule-Based")
+        st.markdown("""
+        *To use ML model, upload:*
+        - `password_model.pkl`
+        - `password_scaler.pkl`
+        """)
+    
     st.markdown("""
-    This advanced analyzer uses:
-    
-    - **Machine Learning Model** trained on password patterns
-    - **Security Rule Engine** for common vulnerabilities  
-    - **Real-time Feature Analysis** of composition
-    - **Industry Best Practices** from security standards
-    
     ### 🛡️ Security Levels:
-    **🔴 Very Weak:** Immediate risk, easily crackable
+    **🔴 Very Weak:** Immediate risk, easily crackable  
     **🟠 Weak:** Vulnerable to basic attacks  
-    **🟢 Strong:** Robust protection against attacks
-    """)
+    **🟢 Strong:** Robust protection
     
-    st.markdown("---")
-    st.markdown("### 👨‍💻 Developed By")
-    st.markdown("""
+    ---
+    ### 👨‍💻 Developed By
     **Mubashir & Taha**  
-    Information Security Project 2025  
-    Advanced ML Security Analysis
+    Information Security Project 2025
     """)
