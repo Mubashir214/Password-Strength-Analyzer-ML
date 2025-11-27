@@ -1,5 +1,8 @@
-echo "streamlit>=1.28.0
-pandas>=1.5.0
-numpy>=1.21.0
-scikit-learn>=1.2.0
-joblib>=1.2.0" > requirements.txt
+streamlit
+pandas
+numpy
+scikit-learn
+joblib
+matplotlib
+seaborn
+regex
