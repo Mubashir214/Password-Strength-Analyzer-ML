@@ -12,7 +12,7 @@ The system analyzes passwords **locally** (no data is uploaded online) using a *
 
 ## Features
 - User enters password locally.
-- ML-based prediction: **Weak / Medium / Strong**.
+- ML-based prediction: **very Weak / weak / Strong**.
 - Feature extraction:
   - Length
   - Uppercase letters
@@ -21,8 +21,8 @@ The system analyzes passwords **locally** (no data is uploaded online) using a *
   - Special characters
   - Common weak patterns
 - Clear color-coded feedback:
-  - **Weak** → Red  
-  - **Medium** → Orange  
+  - **very Weak** → Red  
+  - **weak** → Orange  
   - **Strong** → Green
 - Visualization of password patterns (optional).
 
