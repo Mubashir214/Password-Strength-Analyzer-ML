@@ -5,11 +5,26 @@ import joblib
 import re
 
 # ----------------------------
-# Load Model & Scaler
+# Load Model & Scaler with Check
 # ----------------------------
-model = joblib.load("password_model.pkl")
-scaler = joblib.load("password_scaler.pkl")
+model_loaded = False
+scaler_loaded = False
 
+try:
+    model = joblib.load("password_model.pkl")
+    model_loaded = True
+except Exception as e:
+    st.error(f"❌ Failed to load model: {e}")
+
+try:
+    scaler = joblib.load("password_scaler.pkl")
+    scaler_loaded = True
+except Exception as e:
+    st.error(f"❌ Failed to load scaler: {e}")
+
+# Show success message if both loaded
+if model_loaded and scaler_loaded:
+    st.success("✅ Model and scaler loaded successfully!")
 
 # ----------------------------
 # Feature Extraction Function
@@ -31,19 +46,15 @@ def extract_features(password):
 
     return features
 
-
 # ----------------------------
 # PURE ML Prediction (NO RULES)
 # ----------------------------
 def predict_strength(password):
     f = extract_features(password)
-
     df_f = pd.DataFrame([f])
     scaled = scaler.transform(df_f)
-
     pred = model.predict(scaled)[0]  # Uses model weights only
     return pred
-
 
 # ----------------------------
 # UI Colors
@@ -56,37 +67,38 @@ def get_color(label):
     else:
         return "🟢 **Strong Password**"
 
-
 # ----------------------------
 # Streamlit UI
 # ----------------------------
 st.set_page_config(page_title="Password Strength Analyzer", page_icon="🔐", layout="centered")
-
 st.title("🔐 Password Strength Analyzer")
 st.write("This tool analyzes your password using Machine Learning only (no manual rules).")
 
-password = st.text_input("Enter a Password:", type="password")
+if not (model_loaded and scaler_loaded):
+    st.warning("⚠ Model or scaler not loaded. Predictions are unavailable.")
+else:
+    password = st.text_input("Enter a Password:", type="password")
 
-if st.button("Analyze Password"):
-    if password.strip() == "":
-        st.warning("⚠ Please enter a password.")
-    else:
-        strength = predict_strength(password)
-        st.markdown(f"### {get_color(strength)}")
-
-        # Detailed Feedback
-        st.subheader("🔎 Security Suggestions")
-        if strength == "very_weak":
-            st.error("Your password is extremely weak!")
-        elif strength == "weak":
-            st.warning("Your password is weak. Add more digits, special characters, and uppercase letters.")
+    if st.button("Analyze Password"):
+        if password.strip() == "":
+            st.warning("⚠ Please enter a password.")
         else:
-            st.success("Your password is strong! Good job 👍")
+            strength = predict_strength(password)
+            st.markdown(f"### {get_color(strength)}")
 
-        # Show extracted features
-        st.subheader("🧠 Feature Analysis")
-        f = extract_features(password)
-        st.json(f)
+            # Detailed Feedback
+            st.subheader("🔎 Security Suggestions")
+            if strength == "very_weak":
+                st.error("Your password is extremely weak!")
+            elif strength == "weak":
+                st.warning("Your password is weak. Add more digits, special characters, and uppercase letters.")
+            else:
+                st.success("Your password is strong! Good job 👍")
+
+            # Show extracted features
+            st.subheader("🧠 Feature Analysis")
+            f = extract_features(password)
+            st.json(f)
 
 # Footer
 st.markdown("---")
