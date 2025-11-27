@@ -24,7 +24,7 @@ def load_models():
 model, scaler, models_loaded = load_models()
 
 # ----------------------------
-# Feature Extraction Function
+# Feature Extraction Function - FIXED FEATURE NAMES
 # ----------------------------
 def extract_features(password):
     features = {}
@@ -39,8 +39,8 @@ def extract_features(password):
     features['upper_ratio'] = features['upper'] / max(1, features['length'])
     features['lower_ratio'] = features['lower'] / max(1, features['length'])
 
-    # Common Weak Patterns
-    features['common_pattern'] = int(bool(re.search(r"123|password|qwerty|abc", password.lower())))
+    # Common Weak Patterns - FIXED: using the exact feature name from training
+    features['common_pattern_any'] = int(bool(re.search(r"123|password|qwerty|abc|admin|welcome|123456|letmein", password.lower())))
 
     return features
 
@@ -53,11 +53,12 @@ def rule_based_predict(features, password):
     
     # Very weak conditions
     very_weak_patterns = ["password", "12345", "123456", "12345678", "123456789", 
-                         "qwerty", "abc123", "admin", "welcome", "letmein", "monkey"]
+                         "qwerty", "abc123", "admin", "welcome", "letmein", "monkey",
+                         "password1", "1234", "123", "qwerty123"]
     
     if (features['length'] <= 4 or
         pw_lower in very_weak_patterns or
-        features['common_pattern'] == 1):
+        features['common_pattern_any'] == 1):
         return "very_weak"
     
     # Weak conditions
@@ -86,20 +87,20 @@ def rule_based_predict(features, password):
     return "weak"
 
 # ----------------------------
-# ML Prediction with Feature Alignment
+# ML Prediction with CORRECT Feature Alignment
 # ----------------------------
 def ml_predict(features):
-    """ML prediction with proper feature alignment"""
+    """ML prediction with proper feature alignment - FIXED"""
     try:
-        # Create DataFrame with expected feature names
+        # CORRECT feature names that match the trained model
         expected_features = [
             'length', 'upper', 'lower', 'digits', 'special',
             'digit_ratio', 'special_ratio', 'upper_ratio', 'lower_ratio', 
-            'common_pattern'
+            'common_pattern_any'  # FIXED: This matches what the model expects
         ]
         
-        # Ensure all expected features are present
-        feature_row = [features.get(feature, 0) for feature in expected_features]
+        # Ensure all expected features are present and in correct order
+        feature_row = [features[feature] for feature in expected_features]
         df_f = pd.DataFrame([feature_row], columns=expected_features)
         
         # Scale features
@@ -125,7 +126,7 @@ def predict_strength(password):
         return "very_weak"
 
     # RULE 2: Common weak passwords
-    common_weak_list = ["password", "12345", "123456", "qwerty", "abc123", "admin", "welcome"]
+    common_weak_list = ["password", "12345", "123456", "qwerty", "abc123", "admin", "welcome", "letmein"]
     if pw_lower in common_weak_list:
         return "very_weak"
 
@@ -279,12 +280,13 @@ st.markdown("""
         margin: 1rem 0;
         border-left: 5px solid #4d7cfe;
     }
-    .model-status {
+    .feature-debug {
+        background: #f8f9fa;
         padding: 1rem;
         border-radius: 10px;
-        margin: 0.5rem 0;
-        text-align: center;
-        font-weight: bold;
+        margin: 1rem 0;
+        font-family: monospace;
+        font-size: 0.9rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -429,21 +431,11 @@ with col2:
                         </div>
                         """, unsafe_allow_html=True)
                 
-                # Security recommendations
-                with st.expander("💡 **Security Recommendations & Best Practices**", expanded=True):
-                    st.markdown("""
-                    <div style="background: #f8f9fa; padding: 2rem; border-radius: 15px;">
-                        <h4>🎯 How to Create Strong Passwords:</h4>
-                        <ul style="text-align: left; font-size: 1.1rem;">
-                            <li><b>Use 12+ characters</b> - Longer passwords are exponentially stronger</li>
-                            <li><b>Mix character types</b> - Upper/lower case, numbers, symbols</li>
-                            <li><b>Avoid dictionary words</b> - Use random combinations</li>
-                            <li><b>No personal information</b> - Names, birthdays, pet names</li>
-                            <li><b>Unique for each account</b> - Prevent credential stuffing</li>
-                            <li><b>Consider passphrases</b> - "PurpleDragon$FliesHigh42!"</li>
-                        </ul>
-                    </div>
-                    """, unsafe_allow_html=True)
+                # Debug information (can be removed in production)
+                with st.expander("🔧 Technical Details", expanded=False):
+                    st.markdown("### Feature Values Used:")
+                    st.json(features)
+                    st.markdown(f"**Analysis Method:** {'🤖 ML Model' if models_loaded and 'ml_pred' in locals() else '⚡ Rule-Based'}")
 
 # Footer
 st.markdown("---")
@@ -462,6 +454,7 @@ with st.sidebar:
     # Model status
     if models_loaded:
         st.success("### 🤖 ML Model: ✅ Loaded")
+        st.info("**Feature:** `common_pattern_any` ✅")
     else:
         st.warning("### ⚡ ML Model: Using Rule-Based")
         st.markdown("""
