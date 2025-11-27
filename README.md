@@ -1,42 +1,56 @@
-# Password Strength Analyzer Using Machine Learning
+1. Introduction
 
-## Project Overview
-This project is a **Password Strength Analyzer** that classifies passwords as **Weak, Medium, or Strong** using machine learning and feature extraction. Weak passwords are one of the biggest security risks, and this tool helps users understand and improve password security.
+Weak passwords remain one of the biggest attack vectors in modern systems. Users often choose predictable passwords such as 123456, password, or short dictionary words.
 
-The system analyzes passwords **locally** (no data is uploaded online) using a **Logistic Regression model** trained on patterns from a balanced dataset inspired by `rockyou.txt`. The model evaluates features such as length, character diversity, digits, special characters, and common weak patterns.
+This project builds a local, offline Password Strength Analyzer using Machine Learning (Logistic Regression) trained on a balanced password dataset inspired by RockYou.
 
----
+2. Project Overview
 
+The analyzer extracts features from a password such as:
 
----
+Length
 
-## Features
-- User enters password locally.
-- ML-based prediction: **very Weak / weak / Strong**.
-- Feature extraction:
-  - Length
-  - Uppercase letters
-  - Lowercase letters
-  - Digits
-  - Special characters
-  - Common weak patterns
-- Clear color-coded feedback:
-  - **very Weak** → Red  
-  - **weak** → Orange  
-  - **Strong** → Green
-- Visualization of password patterns (optional).
+Uppercase / Lowercase letters
 
----
+Digits
 
-## Tools & Technologies
-- **Python 3.x**  
-- **Streamlit** (Web Interface)  
-- **Scikit-learn** (ML Model: Logistic Regression)  
-- **Pandas & NumPy** (Data Processing)  
-- **Matplotlib / Seaborn** (Visualization)  
-- **Joblib** (Save/Load Model)  
+Special characters
 
----
+Dictionary-like patterns
 
-## Folder Structure
+Common weak sequences (123, qwerty, password, abc)
 
+Using these features, the ML model predicts:
+
+very_weak
+
+weak
+
+strong
+
+The system is 100% offline, lightweight, and streamlit-based.
+
+3. Tools & Technologies
+
+Python
+
+Scikit-Learn (Logistic Regression Model)
+
+Pandas
+
+NumPy
+
+Streamlit (GUI)
+
+Matplotlib / Seaborn
+
+Joblib
+
+4. Features
+
+✔ Offline and secure
+✔ Machine-learning driven predictions
+✔ Visual feedback
+✔ Color-coded results
+✔ Real-time Streamlit UI
+✔ Dataset balanced: 100 very_weak / 100 weak / 100 strong
